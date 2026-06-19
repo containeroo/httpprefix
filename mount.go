@@ -93,14 +93,18 @@ func (h prefixRedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 //   - prefix + "/" subtree via http.StripPrefix(prefix, h)
 //   - bare prefix redirect to prefix + "/"
 //
+// If prefix normalizes to "", MountUnderPrefix returns h unchanged. This
+// includes empty, whitespace-only, root-like values, and full URLs without a
+// path.
+//
 // Redirect status is:
 //   - 308 for GET and HEAD
 //   - 307 for all other methods
 //
-// Prefix normalization inside this function:
-//   - "" and "/" return h unchanged
+// Prefix normalization inside this function matches NormalizeRoutePrefix:
+//   - full URLs use only their path
 //   - leading slash is added when missing
-//   - trailing slashes are trimmed
+//   - trailing slashes are removed
 //
 // This function uses default redirect status codes (GET/HEAD: 308, others: 307).
 // Use MountUnderPrefixWithOptions to override redirect codes.
@@ -111,21 +115,16 @@ func MountUnderPrefix(h http.Handler, prefix string) http.Handler {
 // MountUnderPrefixWithOptions behaves like MountUnderPrefix and accepts optional
 // redirect status code overrides.
 //
+// If prefix normalizes to "", h is returned unchanged.
+//
 // Allowed redirect codes are 301, 302, 303, 307, and 308.
 // Invalid codes are replaced with defaults (GET/HEAD: 308, others: 307).
 func MountUnderPrefixWithOptions(h http.Handler, prefix string, opts ...Option) http.Handler {
 	options := optionsFrom(opts...)
 
-	// Normalize.
-	if prefix == "" || prefix == "/" {
+	prefix = NormalizeRoutePrefix(prefix)
+	if prefix == "" {
 		return h
-	}
-	if prefix[0] != '/' {
-		prefix = "/" + prefix
-	}
-	// Trim trailing slashes.
-	for len(prefix) > 1 && prefix[len(prefix)-1] == '/' {
-		prefix = prefix[:len(prefix)-1]
 	}
 
 	mux := http.NewServeMux()

@@ -79,15 +79,18 @@ Returns a handler that:
 
 - serves `h` under `prefix + "/"` via `http.StripPrefix`
 - redirects bare `prefix` to `prefix + "/"`
+- returns `h` unchanged when `prefix` normalizes to `""`
 
 Redirect status codes:
 
 - `GET`, `HEAD` -> `308 Permanent Redirect`
 - all others -> `307 Temporary Redirect`
 
-Normalization inside mount:
+Normalization inside mount matches `NormalizeRoutePrefix`:
 
-- `""` and `"/"` return `h` unchanged
+- empty, whitespace-only, and root-like values return `h` unchanged
+- full URLs use only their path
+- full URLs without a path return `h` unchanged
 - missing leading slash is added
 - trailing slashes are removed
 
@@ -108,6 +111,7 @@ If you pass anything else, defaults are used (`308` for `GET`/`HEAD`, `307` othe
 
 ## Behavior Notes
 
+- If the normalized prefix is empty, the original handler is returned unchanged.
 - The package does not modify query strings when redirecting.
 - Redirection is path-based and method-aware to preserve semantics for non-GET requests.
 - Routing behavior relies on `net/http` `ServeMux` path patterns.

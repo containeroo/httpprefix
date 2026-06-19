@@ -21,6 +21,32 @@ func TestMountUnderPrefix(t *testing.T) {
 		_, _ = io.WriteString(w, "ok")
 	})
 
+	t.Run("empty and root-like prefixes return original handler", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []string{
+			"",
+			"   ",
+			"/",
+			"///",
+			"https://example.com",
+			"https://example.com/",
+		}
+
+		for _, prefix := range tests {
+			prefix := prefix
+
+			t.Run(prefix, func(t *testing.T) {
+				t.Parallel()
+
+				h := MountUnderPrefix(inner, prefix)
+				if h != inner {
+					t.Fatal("expected original handler")
+				}
+			})
+		}
+	})
+
 	t.Run("prefix '/' behaves like root", func(t *testing.T) {
 		t.Parallel()
 
@@ -35,6 +61,8 @@ func TestMountUnderPrefix(t *testing.T) {
 	})
 
 	t.Run("prefix without leading slash is normalized", func(t *testing.T) {
+		t.Parallel()
+
 		h := MountUnderPrefix(inner, "tambua")
 
 		rec := httptest.NewRecorder()
@@ -46,6 +74,8 @@ func TestMountUnderPrefix(t *testing.T) {
 	})
 
 	t.Run("prefix with trailing slash is normalized", func(t *testing.T) {
+		t.Parallel()
+
 		h := MountUnderPrefix(inner, "/tambua/")
 
 		rec := httptest.NewRecorder()
@@ -56,7 +86,20 @@ func TestMountUnderPrefix(t *testing.T) {
 		equal(t, "foo", rec.Body.String())
 	})
 
-	t.Run("empty prefix returns original handler (serves at root)", func(t *testing.T) {
+	t.Run("full URL prefix is normalized", func(t *testing.T) {
+		t.Parallel()
+
+		h := MountUnderPrefix(inner, "https://example.com/tambua/")
+
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, "/tambua/foo", nil)
+		h.ServeHTTP(rec, req)
+
+		equal(t, http.StatusOK, rec.Code)
+		equal(t, "foo", rec.Body.String())
+	})
+
+	t.Run("empty prefix serves at root", func(t *testing.T) {
 		t.Parallel()
 
 		h := MountUnderPrefix(inner, "")
