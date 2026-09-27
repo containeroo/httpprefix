@@ -30,12 +30,20 @@ func ValidateRoutePrefix(prefix string) error {
 		}
 		for i := 0; i < len(segment); i++ {
 			c := segment[i]
-			if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' ||
-				c == '-' || c == '.' || c == '_' || c == '~' {
+			if isAlphaNum(c) ||
+				c == '-' ||
+				c == '.' ||
+				c == '_' ||
+				c == '~' {
 				continue
 			}
 			return errors.New("route prefix segments must contain only ASCII letters, digits, '-', '.', '_', or '~'")
 		}
 	}
 	return nil
+}
+
+// isAlphaNum reports whether c is an ASCII letter or digit.
+func isAlphaNum(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
