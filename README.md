@@ -19,27 +19,27 @@ go get github.com/containeroo/httpprefix
 package main
 
 import (
-	"io"
-	"log"
-	"net/http"
+    "io"
+    "log"
+    "net/http"
 
-	"github.com/containeroo/httpprefix"
+    "github.com/containeroo/httpprefix"
 )
 
 func main() {
-	// Could come from env/config/flag: "", "/app", "app", or full URL.
-	prefix := httpprefix.NormalizeRoutePrefix("https://example.com/app/")
+    // Could come from env/config/flag: "", "/app", "app", or full URL.
+    prefix := httpprefix.NormalizeRoutePrefix("https://example.com/app/")
 
-	inner := http.NewServeMux()
-	inner.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "ok")
-	})
-	inner.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "healthy")
-	})
+    inner := http.NewServeMux()
+    inner.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
+        _, _ = io.WriteString(w, "ok")
+    })
+    inner.HandleFunc("GET /health", func(w http.ResponseWriter, _ *http.Request) {
+        _, _ = io.WriteString(w, "healthy")
+    })
 
-	h := httpprefix.MountUnderPrefix(inner, prefix)
-	log.Fatal(http.ListenAndServe(":8080", h))
+    h := httpprefix.MountUnderPrefix(inner, prefix)
+    log.Fatal(http.ListenAndServe(":8080", h))
 }
 ```
 
@@ -53,10 +53,10 @@ With `prefix == "/app"`:
 
 ```go
 h := httpprefix.MountUnderPrefixWithOptions(
-	inner,
-	"/app",
-	httpprefix.WithGetHeadRedirectCode(http.StatusMovedPermanently), // 301
-	httpprefix.WithOtherRedirectCode(http.StatusFound),              // 302
+    inner,
+    "/app",
+    httpprefix.WithGetHeadRedirectCode(http.StatusMovedPermanently), // 301
+    httpprefix.WithOtherRedirectCode(http.StatusFound),              // 302
 )
 ```
 
