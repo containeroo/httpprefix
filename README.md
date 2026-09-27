@@ -64,6 +64,45 @@ h := httpprefix.MountUnderPrefixWithOptions(
 
 ## API
 
+### `ValidateRoutePrefix(prefix string) error`
+
+Optionally validate strict deployment configuration **before** normalization:
+
+```go
+input := "/app/" // from a flag or environment variable
+if err := httpprefix.ValidateRoutePrefix(input); err != nil {
+    return err
+}
+prefix := httpprefix.NormalizeRoutePrefix(input) // "/app"
+```
+
+Accepts empty or `/` for root deployment, absolute paths with ASCII unreserved
+characters (`A-Z`, `a-z`, `0-9`, `-`, `.`, `_`, `~`), and one trailing slash.
+Rejects dot segments, empty segments, URLs, percent escapes, whitespace,
+backslashes, query strings, and fragments. Validation uses no regular expressions.
+Existing normalization and mounting remain permissive for compatibility.
+
+### `RouteURL(prefix, target string) string`
+
+Generate links, form actions, asset URLs, or redirect destinations using the same
+prefix as the mount:
+
+```go
+httpprefix.RouteURL("/app", "/")                 // "/app/"
+httpprefix.RouteURL("/app", "/pages/foo?q=1#top") // "/app/pages/foo?q=1#top"
+httpprefix.RouteURL("", "/pages/foo")            // "/pages/foo"
+```
+
+The prefix is normalized. Pass **prefix-free application paths**; do not call
+this helper again on a generated URL. A prefix can match an internal route name:
+`RouteURL("/pages", "/pages/foo")` correctly returns `/pages/pages/foo`.
+
+Local paths retain escaping, query strings, and fragments. Malformed local paths,
+network-path references (`//host`), backslashes, line breaks, and decoded dot
+segments fall back to the deployment root. External URLs and relative references
+remain unchanged. This is not a general URL sanitizer or a redirect authorization
+check; apply your application's destination policy separately.
+
 ### `NormalizeRoutePrefix(input string) string`
 
 Normalizes configuration input into a canonical prefix:
@@ -114,6 +153,7 @@ If you pass anything else, defaults are used (`308` for `GET`/`HEAD`, `307` othe
 - If the normalized prefix is empty, the original handler is returned unchanged.
 - The package does not modify query strings when redirecting.
 - Redirection is path-based and method-aware to preserve semantics for non-GET requests.
+- Mounting does not rewrite redirects emitted by the inner handler or `ServeMux`; applications must account for those separately.
 - Routing behavior relies on `net/http` `ServeMux` path patterns.
 
 ## Versioning

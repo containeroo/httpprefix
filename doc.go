@@ -5,6 +5,8 @@
 // sub-path in production (for example behind a reverse proxy).
 //
 // The package exposes:
+//   - ValidateRoutePrefix: optionally validates strict path-only configuration
+//   - RouteURL: generates outbound references from prefix-free application paths
 //   - NormalizeRoutePrefix: converts user-configurable values into a canonical
 //     prefix ("" or "/prefix")
 //   - MountUnderPrefix: mounts handlers under that prefix and applies consistent

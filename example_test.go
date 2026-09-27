@@ -70,3 +70,28 @@ func ExampleMountUnderPrefixWithOptions() {
 	// 301 /app/
 	// 302 /app/
 }
+
+func ExampleValidateRoutePrefix() {
+	input := "/app/"
+	if err := httpprefix.ValidateRoutePrefix(input); err != nil {
+		fmt.Println(err)
+		return
+	}
+	fmt.Println(httpprefix.NormalizeRoutePrefix(input))
+	fmt.Println(httpprefix.ValidateRoutePrefix("/app/../other") != nil)
+	// Output:
+	// /app
+	// true
+}
+
+func ExampleRouteURL() {
+	fmt.Println(httpprefix.RouteURL("/app", "/"))
+	fmt.Println(httpprefix.RouteURL("/app", "/pages/foo?q=bar#top"))
+	fmt.Println(httpprefix.RouteURL("", "/pages/foo"))
+	fmt.Println(httpprefix.RouteURL("/pages", "/pages/foo"))
+	// Output:
+	// /app/
+	// /app/pages/foo?q=bar#top
+	// /pages/foo
+	// /pages/pages/foo
+}
