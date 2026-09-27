@@ -61,17 +61,25 @@ func optionsFrom(opts ...Option) Options {
 	return options
 }
 
-// sanitizeRedirectCode ensures redirect status codes stay within safe redirect values.
+// sanitizeRedirectCode returns code when it is a supported redirect status, otherwise fallback.
 func sanitizeRedirectCode(code, fallback int) int {
+	if isRedirectStatusCode(code) {
+		return code
+	}
+	return fallback
+}
+
+// isRedirectStatusCode reports whether code is supported for prefix redirects.
+func isRedirectStatusCode(code int) bool {
 	switch code {
 	case http.StatusMovedPermanently, // 301
 		http.StatusFound,             // 302
 		http.StatusSeeOther,          // 303
 		http.StatusTemporaryRedirect, // 307
 		http.StatusPermanentRedirect: // 308
-		return code
+		return true
 	default:
-		return fallback
+		return false
 	}
 }
 
@@ -143,9 +151,23 @@ func MountUnderPrefixWithOptions(h http.Handler, prefix string, opts ...Option) 
 // It uses configurable status codes, defaulting to 308 for GET/HEAD and 307 for
 // other methods.
 func handlePrefixRedirect(w http.ResponseWriter, r *http.Request, prefix string, options Options) {
-	status := options.OtherRedirectCode
-	if r.Method == http.MethodGet || r.Method == http.MethodHead {
-		status = options.GetHeadRedirectCode
+	http.Redirect(w, r, prefix+"/", redirectCodeForMethod(r.Method, options))
+}
+
+// redirectCodeForMethod returns the configured redirect status for the request method.
+func redirectCodeForMethod(method string, options Options) int {
+	if usesGetHeadRedirectCode(method) {
+		return options.GetHeadRedirectCode
 	}
-	http.Redirect(w, r, prefix+"/", status)
+	return options.OtherRedirectCode
+}
+
+// usesGetHeadRedirectCode reports whether method uses the GET/HEAD redirect policy.
+func usesGetHeadRedirectCode(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead:
+		return true
+	default:
+		return false
+	}
 }

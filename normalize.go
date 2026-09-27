@@ -18,26 +18,36 @@ import (
 //
 // The returned value is always either "" or a string beginning with "/".
 func NormalizeRoutePrefix(input string) string {
-	s := strings.TrimSpace(input)
-	if s == "" || s == "/" {
+	prefix := strings.TrimSpace(input)
+	if isRootRoutePrefix(prefix) {
 		return ""
 	}
 
-	// Attempt URL parse. Only treat it as a URL if a scheme is present.
-	if u, err := url.Parse(s); err == nil && u.Scheme != "" {
-		s = u.Path
+	if path, ok := absoluteURLPath(prefix); ok {
+		prefix = path
 	}
 
-	s = strings.TrimSpace(s)
-	s = strings.TrimRight(s, "/")
-
-	if s == "" || s == "/" {
+	prefix = strings.TrimSpace(prefix)
+	prefix = strings.TrimRight(prefix, "/")
+	if isRootRoutePrefix(prefix) {
 		return ""
 	}
 
-	if !strings.HasPrefix(s, "/") {
-		s = "/" + s
+	if !strings.HasPrefix(prefix, "/") {
+		prefix = "/" + prefix
 	}
 
-	return s
+	return prefix
+}
+
+// absoluteURLPath returns the path when value is an absolute URL with a scheme.
+func absoluteURLPath(value string) (string, bool) {
+	u, err := url.Parse(value)
+	if err != nil {
+		return "", false
+	}
+	if u.Scheme == "" {
+		return "", false
+	}
+	return u.Path, true
 }

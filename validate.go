@@ -16,31 +16,50 @@ import (
 // change the input, and the existing normalizer and mounting helpers remain
 // permissive for backward compatibility.
 func ValidateRoutePrefix(prefix string) error {
-	if prefix == "" || prefix == "/" {
+	if isRootRoutePrefix(prefix) {
 		return nil
 	}
+
 	if !strings.HasPrefix(prefix, "/") {
 		return errors.New("route prefix must be an absolute path")
 	}
 
 	path := strings.TrimSuffix(prefix[1:], "/")
 	for _, segment := range strings.Split(path, "/") {
-		if segment == "" || segment == "." || segment == ".." {
+		if isInvalidRoutePrefixSegment(segment) {
 			return errors.New("route prefix must not contain empty or dot segments")
 		}
-		for i := 0; i < len(segment); i++ {
-			c := segment[i]
-			if isAlphaNum(c) ||
-				c == '-' ||
-				c == '.' ||
-				c == '_' ||
-				c == '~' {
-				continue
-			}
+		if !hasOnlyRoutePrefixSegmentChars(segment) {
 			return errors.New("route prefix segments must contain only ASCII letters, digits, '-', '.', '_', or '~'")
 		}
 	}
+
 	return nil
+}
+
+// isRootRoutePrefix reports whether prefix represents an unprefixed deployment.
+func isRootRoutePrefix(prefix string) bool {
+	return prefix == "" || prefix == "/"
+}
+
+// isInvalidRoutePrefixSegment reports whether segment is empty or a dot segment.
+func isInvalidRoutePrefixSegment(segment string) bool {
+	return segment == "" || isDotSegment(segment)
+}
+
+// hasOnlyRoutePrefixSegmentChars reports whether every byte is allowed in a route prefix segment.
+func hasOnlyRoutePrefixSegmentChars(segment string) bool {
+	for i := 0; i < len(segment); i++ {
+		if !isRoutePrefixSegmentChar(segment[i]) {
+			return false
+		}
+	}
+	return true
+}
+
+// isRoutePrefixSegmentChar reports whether c is allowed in a route prefix segment.
+func isRoutePrefixSegmentChar(c byte) bool {
+	return isAlphaNum(c) || c == '-' || c == '.' || c == '_' || c == '~'
 }
 
 // isAlphaNum reports whether c is an ASCII letter or digit.

@@ -5,266 +5,283 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMountUnderPrefix(t *testing.T) {
 	t.Parallel()
 
-	inner := http.NewServeMux()
-	inner.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, "root")
-	})
-	inner.HandleFunc("GET /foo", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, "foo")
-	})
-	inner.HandleFunc("GET /api/v1/ok", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = io.WriteString(w, "ok")
-	})
+	inner := newTestHandler()
 
-	t.Run("empty and root-like prefixes return original handler", func(t *testing.T) {
+	t.Run("empty prefix returns original handler", func(t *testing.T) {
 		t.Parallel()
-
-		tests := []string{
-			"",
-			"   ",
-			"/",
-			"///",
-			"https://example.com",
-			"https://example.com/",
-		}
-
-		for _, prefix := range tests {
-			prefix := prefix
-
-			t.Run(prefix, func(t *testing.T) {
-				t.Parallel()
-
-				h := MountUnderPrefix(inner, prefix)
-				if h != inner {
-					t.Fatal("expected original handler")
-				}
-			})
-		}
+		require.Same(t, inner, MountUnderPrefix(inner, ""))
 	})
 
-	t.Run("prefix '/' behaves like root", func(t *testing.T) {
+	t.Run("whitespace prefix returns original handler", func(t *testing.T) {
 		t.Parallel()
+		require.Same(t, inner, MountUnderPrefix(inner, "   "))
+	})
 
+	t.Run("root prefix returns original handler", func(t *testing.T) {
+		t.Parallel()
+		require.Same(t, inner, MountUnderPrefix(inner, "/"))
+	})
+
+	t.Run("root like prefix returns original handler", func(t *testing.T) {
+		t.Parallel()
+		require.Same(t, inner, MountUnderPrefix(inner, "///"))
+	})
+
+	t.Run("URL without path returns original handler", func(t *testing.T) {
+		t.Parallel()
+		require.Same(t, inner, MountUnderPrefix(inner, "https://example.com"))
+	})
+
+	t.Run("URL with root path returns original handler", func(t *testing.T) {
+		t.Parallel()
+		require.Same(t, inner, MountUnderPrefix(inner, "https://example.com/"))
+	})
+
+	t.Run("root prefix serves root routes", func(t *testing.T) {
+		t.Parallel()
 		h := MountUnderPrefix(inner, "/")
-
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/foo", nil)
-		h.ServeHTTP(rec, req)
-
-		equal(t, http.StatusOK, rec.Code)
-		equal(t, "foo", rec.Body.String())
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/foo", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "foo", rec.Body.String())
 	})
 
 	t.Run("prefix without leading slash is normalized", func(t *testing.T) {
 		t.Parallel()
-
 		h := MountUnderPrefix(inner, "tambua")
-
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/tambua/foo", nil)
-		h.ServeHTTP(rec, req)
-
-		equal(t, http.StatusOK, rec.Code)
-		equal(t, "foo", rec.Body.String())
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua/foo", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "foo", rec.Body.String())
 	})
 
 	t.Run("prefix with trailing slash is normalized", func(t *testing.T) {
 		t.Parallel()
-
 		h := MountUnderPrefix(inner, "/tambua/")
-
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/tambua/foo", nil)
-		h.ServeHTTP(rec, req)
-
-		equal(t, http.StatusOK, rec.Code)
-		equal(t, "foo", rec.Body.String())
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua/foo", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "foo", rec.Body.String())
 	})
 
 	t.Run("full URL prefix is normalized", func(t *testing.T) {
 		t.Parallel()
-
 		h := MountUnderPrefix(inner, "https://example.com/tambua/")
-
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/tambua/foo", nil)
-		h.ServeHTTP(rec, req)
-
-		equal(t, http.StatusOK, rec.Code)
-		equal(t, "foo", rec.Body.String())
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua/foo", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "foo", rec.Body.String())
 	})
 
-	t.Run("empty prefix serves at root", func(t *testing.T) {
+	t.Run("bare prefix GET redirects permanently", func(t *testing.T) {
 		t.Parallel()
-
-		h := MountUnderPrefix(inner, "")
-
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		h.ServeHTTP(rec, req)
-		equal(t, http.StatusOK, rec.Code)
-		equal(t, "root", rec.Body.String())
-
-		rec2 := httptest.NewRecorder()
-		req2 := httptest.NewRequest(http.MethodGet, "/tambua/foo", nil)
-		h.ServeHTTP(rec2, req2)
-		equal(t, http.StatusOK, rec2.Code)
-		equal(t, "root", rec2.Body.String())
-	})
-
-	t.Run("bare prefix GET redirects with 308", func(t *testing.T) {
-		t.Parallel()
-
 		h := MountUnderPrefix(inner, "/tambua")
-
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/tambua", nil)
-		h.ServeHTTP(rec, req)
-
-		equal(t, http.StatusPermanentRedirect, rec.Code)
-		equal(t, "/tambua/", rec.Header().Get("Location"))
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua", nil))
+		assert.Equal(t, http.StatusPermanentRedirect, rec.Code)
+		assert.Equal(t, "/tambua/", rec.Header().Get("Location"))
 	})
 
-	t.Run("bare prefix HEAD redirects with 308", func(t *testing.T) {
+	t.Run("bare prefix HEAD redirects permanently", func(t *testing.T) {
 		t.Parallel()
-
 		h := MountUnderPrefix(inner, "/tambua")
-
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodHead, "/tambua", nil)
-		h.ServeHTTP(rec, req)
-
-		equal(t, http.StatusPermanentRedirect, rec.Code)
-		equal(t, "/tambua/", rec.Header().Get("Location"))
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/tambua", nil))
+		assert.Equal(t, http.StatusPermanentRedirect, rec.Code)
+		assert.Equal(t, "/tambua/", rec.Header().Get("Location"))
 	})
 
-	t.Run("POST to bare prefix redirects with 307 (method preserved)", func(t *testing.T) {
+	t.Run("bare prefix POST redirects temporarily", func(t *testing.T) {
 		t.Parallel()
-
 		h := MountUnderPrefix(inner, "/tambua")
-
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodPost, "/tambua", nil)
-		h.ServeHTTP(rec, req)
-
-		equal(t, http.StatusTemporaryRedirect, rec.Code)
-		equal(t, "/tambua/", rec.Header().Get("Location"))
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/tambua", nil))
+		assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
+		assert.Equal(t, "/tambua/", rec.Header().Get("Location"))
 	})
 
-	t.Run("prefixed paths are stripped and routed to inner handler", func(t *testing.T) {
+	t.Run("prefixed route is stripped", func(t *testing.T) {
 		t.Parallel()
-
 		h := MountUnderPrefix(inner, "/tambua")
-
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/tambua/foo", nil)
-		h.ServeHTTP(rec, req)
-		equal(t, http.StatusOK, rec.Code)
-		equal(t, "foo", rec.Body.String())
-
-		rec2 := httptest.NewRecorder()
-		req2 := httptest.NewRequest(http.MethodGet, "/tambua/api/v1/ok", nil)
-		h.ServeHTTP(rec2, req2)
-		equal(t, http.StatusOK, rec2.Code)
-		equal(t, "ok", rec2.Body.String())
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua/foo", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "foo", rec.Body.String())
 	})
 
-	t.Run("prefix with trailing slash serves inner root", func(t *testing.T) {
+	t.Run("nested prefixed route is stripped", func(t *testing.T) {
 		t.Parallel()
-
 		h := MountUnderPrefix(inner, "/tambua")
-
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/tambua/", nil)
-		h.ServeHTTP(rec, req)
-
-		equal(t, http.StatusOK, rec.Code)
-		equal(t, "root", rec.Body.String())
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua/api/v1/ok", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "ok", rec.Body.String())
 	})
 
-	t.Run("non-prefixed paths 404 when mounted under a prefix", func(t *testing.T) {
+	t.Run("prefix subtree root serves inner root", func(t *testing.T) {
 		t.Parallel()
-
 		h := MountUnderPrefix(inner, "/tambua")
-
 		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, "/foo", nil)
-		h.ServeHTTP(rec, req)
-		equal(t, http.StatusNotFound, rec.Code)
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua/", nil))
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Equal(t, "root", rec.Body.String())
+	})
+
+	t.Run("non prefixed path is not found", func(t *testing.T) {
+		t.Parallel()
+		h := MountUnderPrefix(inner, "/tambua")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/foo", nil))
+		assert.Equal(t, http.StatusNotFound, rec.Code)
 	})
 }
 
 func TestMountUnderPrefixWithOptions(t *testing.T) {
 	t.Parallel()
 
+	inner := newTestHandler()
+
+	t.Run("custom GET redirect code is applied", func(t *testing.T) {
+		t.Parallel()
+		h := MountUnderPrefixWithOptions(inner, "/tambua", WithGetHeadRedirectCode(http.StatusMovedPermanently))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua", nil))
+		assert.Equal(t, http.StatusMovedPermanently, rec.Code)
+		assert.Equal(t, "/tambua/", rec.Header().Get("Location"))
+	})
+
+	t.Run("custom POST redirect code is applied", func(t *testing.T) {
+		t.Parallel()
+		h := MountUnderPrefixWithOptions(inner, "/tambua", WithOtherRedirectCode(http.StatusFound))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/tambua", nil))
+		assert.Equal(t, http.StatusFound, rec.Code)
+		assert.Equal(t, "/tambua/", rec.Header().Get("Location"))
+	})
+
+	t.Run("WithOptions sets GET redirect code", func(t *testing.T) {
+		t.Parallel()
+		h := MountUnderPrefixWithOptions(inner, "/tambua", WithOptions(Options{
+			GetHeadRedirectCode: http.StatusPermanentRedirect,
+			OtherRedirectCode:   http.StatusSeeOther,
+		}))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua", nil))
+		assert.Equal(t, http.StatusPermanentRedirect, rec.Code)
+	})
+
+	t.Run("WithOptions sets POST redirect code", func(t *testing.T) {
+		t.Parallel()
+		h := MountUnderPrefixWithOptions(inner, "/tambua", WithOptions(Options{
+			GetHeadRedirectCode: http.StatusPermanentRedirect,
+			OtherRedirectCode:   http.StatusSeeOther,
+		}))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/tambua", nil))
+		assert.Equal(t, http.StatusSeeOther, rec.Code)
+	})
+
+	t.Run("invalid GET redirect code falls back to default", func(t *testing.T) {
+		t.Parallel()
+		h := MountUnderPrefixWithOptions(inner, "/tambua", WithGetHeadRedirectCode(http.StatusOK))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua", nil))
+		assert.Equal(t, http.StatusPermanentRedirect, rec.Code)
+	})
+
+	t.Run("invalid POST redirect code falls back to default", func(t *testing.T) {
+		t.Parallel()
+		h := MountUnderPrefixWithOptions(inner, "/tambua", WithOtherRedirectCode(http.StatusBadRequest))
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/tambua", nil))
+		assert.Equal(t, http.StatusTemporaryRedirect, rec.Code)
+	})
+
+	t.Run("nil option is ignored", func(t *testing.T) {
+		t.Parallel()
+		h := MountUnderPrefixWithOptions(inner, "/tambua", nil)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/tambua", nil))
+		assert.Equal(t, http.StatusPermanentRedirect, rec.Code)
+	})
+}
+
+func TestIsRedirectStatusCode(t *testing.T) {
+	t.Parallel()
+
+	t.Run("301", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, isRedirectStatusCode(http.StatusMovedPermanently))
+	})
+
+	t.Run("302", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, isRedirectStatusCode(http.StatusFound))
+	})
+
+	t.Run("303", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, isRedirectStatusCode(http.StatusSeeOther))
+	})
+
+	t.Run("307", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, isRedirectStatusCode(http.StatusTemporaryRedirect))
+	})
+
+	t.Run("308", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, isRedirectStatusCode(http.StatusPermanentRedirect))
+	})
+
+	t.Run("non redirect status", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, isRedirectStatusCode(http.StatusOK))
+	})
+}
+
+func TestRedirectCodeForMethod(t *testing.T) {
+	t.Parallel()
+
+	options := Options{
+		GetHeadRedirectCode: http.StatusMovedPermanently,
+		OtherRedirectCode:   http.StatusSeeOther,
+	}
+
+	t.Run("GET uses GET HEAD code", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, http.StatusMovedPermanently, redirectCodeForMethod(http.MethodGet, options))
+	})
+
+	t.Run("HEAD uses GET HEAD code", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, http.StatusMovedPermanently, redirectCodeForMethod(http.MethodHead, options))
+	})
+
+	t.Run("POST uses other code", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, http.StatusSeeOther, redirectCodeForMethod(http.MethodPost, options))
+	})
+}
+
+func newTestHandler() *http.ServeMux {
 	inner := http.NewServeMux()
-	inner.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+	inner.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.WriteString(w, "root")
 	})
-
-	t.Run("custom redirect codes are applied", func(t *testing.T) {
-		t.Parallel()
-
-		h := MountUnderPrefixWithOptions(
-			inner,
-			"/tambua",
-			WithGetHeadRedirectCode(http.StatusMovedPermanently), // 301
-			WithOtherRedirectCode(http.StatusFound),              // 302
-		)
-
-		getRec := httptest.NewRecorder()
-		h.ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, "/tambua", nil))
-		equal(t, http.StatusMovedPermanently, getRec.Code)
-		equal(t, "/tambua/", getRec.Header().Get("Location"))
-
-		postRec := httptest.NewRecorder()
-		h.ServeHTTP(postRec, httptest.NewRequest(http.MethodPost, "/tambua", nil))
-		equal(t, http.StatusFound, postRec.Code)
-		equal(t, "/tambua/", postRec.Header().Get("Location"))
+	inner.HandleFunc("GET /foo", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "foo")
 	})
-
-	t.Run("WithOptions can set both redirect codes", func(t *testing.T) {
-		t.Parallel()
-
-		h := MountUnderPrefixWithOptions(
-			inner,
-			"/tambua",
-			WithOptions(Options{
-				GetHeadRedirectCode: http.StatusPermanentRedirect, // 308
-				OtherRedirectCode:   http.StatusSeeOther,          // 303
-			}),
-		)
-
-		getRec := httptest.NewRecorder()
-		h.ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, "/tambua", nil))
-		equal(t, http.StatusPermanentRedirect, getRec.Code)
-
-		postRec := httptest.NewRecorder()
-		h.ServeHTTP(postRec, httptest.NewRequest(http.MethodPost, "/tambua", nil))
-		equal(t, http.StatusSeeOther, postRec.Code)
+	inner.HandleFunc("GET /api/v1/ok", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "ok")
 	})
-
-	t.Run("invalid redirect codes fall back to defaults", func(t *testing.T) {
-		t.Parallel()
-
-		h := MountUnderPrefixWithOptions(
-			inner,
-			"/tambua",
-			WithGetHeadRedirectCode(http.StatusOK), // invalid redirect status
-			WithOtherRedirectCode(http.StatusBadRequest), // invalid redirect status
-		)
-
-		getRec := httptest.NewRecorder()
-		h.ServeHTTP(getRec, httptest.NewRequest(http.MethodGet, "/tambua", nil))
-		equal(t, http.StatusPermanentRedirect, getRec.Code) // default 308
-
-		postRec := httptest.NewRecorder()
-		h.ServeHTTP(postRec, httptest.NewRequest(http.MethodPost, "/tambua", nil))
-		equal(t, http.StatusTemporaryRedirect, postRec.Code) // default 307
-	})
+	return inner
 }

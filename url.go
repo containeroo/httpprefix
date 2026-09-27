@@ -23,22 +23,50 @@ import (
 // references are returned unchanged. This function is not a general URL
 // sanitizer or an authorization check for redirect destinations.
 func RouteURL(prefix, target string) string {
-	if !strings.HasPrefix(target, "/") {
+	if !isAbsolutePathReference(target) {
 		return target
 	}
+
 	prefix = NormalizeRoutePrefix(prefix)
 	root := prefix + "/"
+
 	u, err := url.Parse(target)
-	if err != nil || strings.HasPrefix(target, "//") || strings.ContainsAny(target, "\\\r\n") {
+	if err != nil {
 		return root
 	}
-	if strings.ContainsAny(u.Path, "\\\r\n") || strings.HasPrefix(u.Path, "//") {
+	if isUnsafeLocalReference(target, u.Path) {
 		return root
 	}
-	for _, segment := range strings.Split(u.Path, "/") {
-		if segment == "." || segment == ".." {
-			return root
+
+	return prefix + target
+}
+
+// isAbsolutePathReference reports whether target starts with an absolute path marker.
+func isAbsolutePathReference(target string) bool {
+	return strings.HasPrefix(target, "/")
+}
+
+// isUnsafeLocalReference reports whether a local URL reference can escape or alter routing semantics.
+func isUnsafeLocalReference(rawTarget, decodedPath string) bool {
+	return isUnsafePath(rawTarget) || isUnsafePath(decodedPath) || hasDotSegment(decodedPath)
+}
+
+// isUnsafePath reports whether path is network-path-like or contains unsafe control/path characters.
+func isUnsafePath(path string) bool {
+	return strings.HasPrefix(path, "//") || strings.ContainsAny(path, "\\\r\n")
+}
+
+// hasDotSegment reports whether path contains a literal or decoded "." or ".." segment.
+func hasDotSegment(path string) bool {
+	for _, segment := range strings.Split(path, "/") {
+		if isDotSegment(segment) {
+			return true
 		}
 	}
-	return prefix + target
+	return false
+}
+
+// isDotSegment reports whether segment is the current or parent directory marker.
+func isDotSegment(segment string) bool {
+	return segment == "." || segment == ".."
 }
