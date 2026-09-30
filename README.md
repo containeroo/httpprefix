@@ -49,6 +49,31 @@ With `prefix == "/app"`:
 - `POST /app` -> `307 Location: /app/`
 - `GET /app/health` -> inner `GET /health`
 
+## Application URLs and Redirects
+
+Mounting supplies request context for `URLForRequest(r, "/login")`, which returns
+`"/app/login"` when mounted at `/app`. Use `Redirect(w, r, "/login", http.StatusFound)`
+for explicit application redirects.
+
+To also rewrite redirect `Location` headers emitted by handlers such as ServeMux
+and FileServer, enable the opt-in option:
+
+```go
+h := httpprefix.MountUnderPrefixWithOptions(inner, "/app", httpprefix.WithRedirectRewriting())
+```
+
+Existing mounts leave handler redirects unchanged unless this option is enabled.
+Rewriting applies to 301, 302, 303, 307, and 308 responses. External URLs and
+relative references are unchanged; unsafe local targets follow `RouteURL`'s
+deployment-root fallback. Use `http.ResponseController` for optional transport
+capabilities through the response wrapper.
+
+Pass prefix-free paths to these helpers and to raw `Location` headers. A path
+starting with the mount name can still be an application path: mounting at
+`/pages` turns `/pages/foo` into `/pages/pages/foo`. `Redirect` explicitly prevents
+double rewriting; do not feed `URLForRequest` output into `http.Redirect` when
+rewriting is enabled. Use `Redirect` instead.
+
 ## Custom Redirect Codes
 
 ```go

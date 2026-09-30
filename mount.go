@@ -7,18 +7,27 @@ const (
 	defaultOtherRedirectCode   = http.StatusTemporaryRedirect // 307
 )
 
-// Options configures redirect status codes used by MountUnderPrefixWithOptions.
+// Options configures mounting and redirects used by MountUnderPrefixWithOptions.
 type Options struct {
 	// GetHeadRedirectCode is used for redirects on GET and HEAD requests.
 	GetHeadRedirectCode int
 	// OtherRedirectCode is used for redirects on non-GET/HEAD requests.
 	OtherRedirectCode int
+	// RewriteRedirects prefixes application-local Location headers on redirects.
+	RewriteRedirects bool
 }
 
 // Option mutates Options used by MountUnderPrefixWithOptions.
 type Option func(*Options)
 
-// WithOptions overwrites all redirect options used by MountUnderPrefixWithOptions.
+// WithRedirectRewriting prefixes application-local redirect destinations.
+// Raw Location paths must be prefix-free; use Redirect for explicit redirects.
+// External URLs and relative references are preserved using RouteURL's rules.
+func WithRedirectRewriting() Option {
+	return func(options *Options) { options.RewriteRedirects = true }
+}
+
+// WithOptions overwrites all options used by MountUnderPrefixWithOptions.
 func WithOptions(opts Options) Option {
 	return func(target *Options) {
 		*target = opts
@@ -115,13 +124,15 @@ func (h prefixRedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 //   - trailing slashes are removed
 //
 // This function uses default redirect status codes (GET/HEAD: 308, others: 307).
-// Use MountUnderPrefixWithOptions to override redirect codes.
+// Mounted requests carry context for URLForRequest and Redirect. Handler
+// Location headers are unchanged unless WithRedirectRewriting is enabled via
+// MountUnderPrefixWithOptions, which also supports overriding redirect codes.
 func MountUnderPrefix(h http.Handler, prefix string) http.Handler {
 	return MountUnderPrefixWithOptions(h, prefix)
 }
 
 // MountUnderPrefixWithOptions behaves like MountUnderPrefix and accepts optional
-// redirect status code overrides.
+// redirect status code overrides and opt-in handler redirect rewriting.
 //
 // If prefix normalizes to "", h is returned unchanged.
 //
@@ -142,7 +153,7 @@ func MountUnderPrefixWithOptions(h http.Handler, prefix string, opts ...Option) 
 	mux.Handle(prefix, prefixRedirectHandler{prefix: prefix, options: options})
 
 	// Mount everything under prefix and strip it so internal routes live at "/".
-	mux.Handle(prefix+"/", http.StripPrefix(prefix, h))
+	mux.Handle(prefix+"/", http.StripPrefix(prefix, withMount(h, prefix, options.RewriteRedirects)))
 
 	return mux
 }
